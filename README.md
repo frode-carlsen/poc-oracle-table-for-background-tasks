@@ -1,4 +1,3 @@
-# poc-oracle-table-for-background-tasks
 Using oracle database table + skip locked to handle distributed/clustered background processing.
 Useful if on an oracle database (can also be made to work on Postgres 9.6)
 
