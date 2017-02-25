@@ -1,4 +1,5 @@
 h1. Proof-of-concept code:
+
 Using oracle database table + skip locked to handle distributed/clustered background processing with low contention and easy recovery.
 
 Useful if on an oracle database (should also work on Postgresql 9.5+ which supports skip locked).  Could also possibly be made to work with DB2 (using skip locked data) and SQLServer (using READPAST)
