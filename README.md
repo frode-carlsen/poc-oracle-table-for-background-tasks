@@ -2,8 +2,8 @@ Using oracle database table + skip locked to handle distributed/clustered backgr
 Useful if on an oracle database (can also be made to work on Postgres 9.6)
 
 Similar to how Oracle SOA Suite - DBAdapter handles distributed polling.
-* [http://www.ateam-oracle.com/db-adapter-distributed-polling-skip-locked-demystified/]
-* [https://docs.oracle.com/cd/E23943_01/integration.1111/e10231/adptr_db.htm#BGBIJHAC]
+* http://www.ateam-oracle.com/db-adapter-distributed-polling-skip-locked-demystified/
+* https://docs.oracle.com/cd/E23943_01/integration.1111/e10231/adptr_db.htm#BGBIJHAC
 
 The code uses a single polling thread (per jvm).  Once any tasks are found, these are dispatched on separate threads (task threads). Each task runs in its own thread, with its own transaction.
 The task threads re-acquires the lock if possible and 'could do some work' and updates status to 'DONE'.  If the task threads doesn't pick up a task within 10 seconds, the polling thread will try and reschedule assuming it's failed.  Once picked up by a task thread, it checks if it's already done before it proceeds to do work, so no duplicate processing will take place.
