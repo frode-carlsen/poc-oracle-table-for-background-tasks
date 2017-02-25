@@ -69,7 +69,7 @@ public class DatabaseTablePoller {
 
                 List<Runnable> runTasks = new ArrayList<>(pollSize);
                 String sql = "SELECT id, priority, status, last_try FROM dbqueue"
-                        + " WHERE (last_try IS NULL or (last_try + interval '10' second < systimestamp))"
+                        + " WHERE (last_try IS NULL or (last_try + numtodsinterval(?, 'second') < systimestamp))"
                         + "       and status not in (?) "
                         + " ORDER BY "
                         + "       priority, last_try nulls first, id"
@@ -77,7 +77,8 @@ public class DatabaseTablePoller {
 
                 try (Connection conn = newConnection();
                         PreparedStatement pstmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)) {
-                    pstmt.setString(1, "DONE");
+                    pstmt.setString(1, "30");
+                    pstmt.setString(2, "DONE");
                     pstmt.setFetchSize(Math.max(1, pollSize / 2));
 
                     ResultSet rs = pstmt.executeQuery();
