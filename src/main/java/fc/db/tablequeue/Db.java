@@ -31,7 +31,7 @@ public class Db {
 
     private static final AtomicBoolean INITIALISED = new AtomicBoolean();
 
-    public static void initTestDb() {
+    public static void initTestDb(boolean forceClean) {
 
         if (INITIALISED.compareAndSet(false, true)) {
             Flyway flyway = new Flyway();
@@ -39,13 +39,15 @@ public class Db {
             flyway.setDataSource(dataSource);
             flyway.setLocations("filesystem:./src/main/resources/db/migrations");
             flyway.setCleanOnValidationError(true);
-            flyway.clean();
+            if (forceClean) {
+                flyway.clean();
+            }
             flyway.migrate();
         }
     }
 
     public static Connection createConnection() throws SQLException {
-        initTestDb();
+        initTestDb(false);
         return dataSource.getConnection();
     }
 }

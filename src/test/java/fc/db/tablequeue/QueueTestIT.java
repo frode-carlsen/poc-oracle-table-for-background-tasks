@@ -14,7 +14,7 @@ import org.junit.Test;
 public class QueueTestIT {
 
     static {
-        Db.initTestDb();
+        Db.initTestDb(true);
     }
 
     @Before
