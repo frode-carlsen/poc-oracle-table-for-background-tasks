@@ -33,8 +33,6 @@ For a real implementation, connecting this to some actual 'work' should be made 
 
 ## A couple of notes on possible added-value functionality:
 
-1. retry and backoff-algorithm in case a task fails (at present this will just be rescheduled).
-2. prioritisation and selection criteria (e.g. do-not-run-earlier-than-time)
 3. exlusive or (only run one task within a given set of tasks concurrently)
  
 
