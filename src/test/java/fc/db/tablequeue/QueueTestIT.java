@@ -14,7 +14,7 @@ import org.junit.Test;
 public class QueueTestIT {
 
     static {
-        Db.initTestDb(true);
+        TestDb.initTestDb(true);
     }
 
     @Before
@@ -30,13 +30,17 @@ public class QueueTestIT {
         };
         String insertSql = "insert into dbqueue (id, priority, status) values (?, ?, ?)";
 
-        try (Connection conn = Db.createConnection(); PreparedStatement stmt = conn.prepareStatement(insertSql);) {
+        try (Connection conn = getConnection(); PreparedStatement stmt = conn.prepareStatement(insertSql);) {
             setupTestData(testdata, stmt);
             stmt.executeBatch();
 
             conn.commit();
         }
 
+    }
+
+    private Connection getConnection() throws SQLException {
+        return TestDb.getDataSource().getConnection();
     }
 
     private void setupTestData(Object[][] testdata, PreparedStatement stmt) throws SQLException {
@@ -53,7 +57,7 @@ public class QueueTestIT {
 
     @After
     public void clear_testdata() throws SQLException {
-        try (Connection conn = Db.createConnection();
+        try (Connection conn = getConnection();
                 PreparedStatement stmt = conn.prepareStatement("truncate table dbqueue");) {
             stmt.execute();
         }
@@ -62,9 +66,9 @@ public class QueueTestIT {
     @Test
     public void shall_read_queue_from_multiple_connections() throws Exception {
 
-        try (Connection conn1 = Db.createConnection();
-                Connection conn2 = Db.createConnection();
-                Connection conn3 = Db.createConnection();) {
+        try (Connection conn1 = getConnection();
+                Connection conn2 = getConnection();
+                Connection conn3 = getConnection();) {
 
             long task1 = getTask(conn1);
             long task2 = getTask(conn2);
@@ -82,9 +86,9 @@ public class QueueTestIT {
     @Test
     public void shall_read_queue() throws Exception {
 
-        try (Connection conn1 = Db.createConnection();
-                Connection conn2 = Db.createConnection();
-                Connection conn3 = Db.createConnection();) {
+        try (Connection conn1 = getConnection();
+                Connection conn2 = getConnection();
+                Connection conn3 = getConnection();) {
 
             long task1 = getTaskExcept(conn1, "DONE");
             long task2 = getTaskExcept(conn2, "DONE");

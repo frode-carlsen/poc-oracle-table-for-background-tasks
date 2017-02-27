@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,22 +36,25 @@ public class DatabaseTablePoller {
 
     private static final Logger log = LoggerFactory.getLogger(DatabaseTablePoller.class);
 
-    private final String threadPoolNamePrefix = DatabaseTablePoller.class.getSimpleName();
+    private final String threadPoolNamePrefix = getClass().getSimpleName();
     private final int maxNumberOfTasksToPoll;
-    private int maxInternalRunTaskQueueSize;
+    private final int maxInternalRunTaskQueueSize;
     private final long delayBetweenPollingMillis = 500L;
     private final TaskDispatcher taskDispatcher;
 
     private final BlockingQueue<Runnable> internalRunTaskWaitQueue;
     private final ExecutorService runTaskService;
     private final ScheduledExecutorService pollingService;
+
     private ScheduledFuture<?> pollingServiceScheduledFuture;
 
-    public DatabaseTablePoller(int numberOfTaskRunnerThreads, int maxNumberOfTasksToPoll, TaskDispatcher taskDispatcher) {
-        this(numberOfTaskRunnerThreads, maxNumberOfTasksToPoll, 100, taskDispatcher);
+    private final DataSource dataSource;
+
+    public DatabaseTablePoller(int numberOfTaskRunnerThreads, int maxNumberOfTasksToPoll, DataSource dataSource, TaskDispatcher taskDispatcher) {
+        this(numberOfTaskRunnerThreads, maxNumberOfTasksToPoll, 100, dataSource, taskDispatcher);
     }
 
-    public DatabaseTablePoller(int numberOfTaskRunnerThreads, int maxNumberOfTasksToPoll, int maxInternalTaskQueueSize, TaskDispatcher taskDispatcher) {
+    public DatabaseTablePoller(int numberOfTaskRunnerThreads, int maxNumberOfTasksToPoll, int maxInternalTaskQueueSize, DataSource dataSource, TaskDispatcher taskDispatcher) {
         if (numberOfTaskRunnerThreads <= 0) {
             throw new IllegalArgumentException("numberOfTaskRunnerThreads<=0: invalid"); //$NON-NLS-1$
         } else if (maxNumberOfTasksToPoll <= 0) {
@@ -57,14 +62,15 @@ public class DatabaseTablePoller {
         } else if (maxInternalTaskQueueSize <= 0) {
             throw new IllegalArgumentException("maxInternalTaskQueueSize<=0: invalid"); //$NON-NLS-1$
         }
-        Objects.requireNonNull(taskDispatcher, "taskDispatcher"); //$NON-NLS-1$
-
         this.maxInternalRunTaskQueueSize = maxInternalTaskQueueSize;
-        this.taskDispatcher = taskDispatcher;
         this.maxNumberOfTasksToPoll = maxNumberOfTasksToPoll;
 
-        this.internalRunTaskWaitQueue = new ArrayBlockingQueue<>(maxInternalRunTaskQueueSize);
+        Objects.requireNonNull(dataSource, "dataSource"); //$NON-NLS-1$
+        Objects.requireNonNull(taskDispatcher, "taskDispatcher"); //$NON-NLS-1$
+        this.dataSource = dataSource;
+        this.taskDispatcher = taskDispatcher;
 
+        this.internalRunTaskWaitQueue = new ArrayBlockingQueue<>(maxInternalRunTaskQueueSize);
         this.pollingService = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory(threadPoolNamePrefix + "-poller", false)); //$NON-NLS-1$
         this.runTaskService = new ThreadPoolExecutor(numberOfTaskRunnerThreads, numberOfTaskRunnerThreads,
                 0L, TimeUnit.MILLISECONDS,
@@ -93,12 +99,12 @@ public class DatabaseTablePoller {
         return "FAILED"; //$NON-NLS-1$
     }
 
-    protected void doWork(Long id, String taskName, int failedAttempts) {
-        taskDispatcher.dispatch(id, taskName, failedAttempts);
+    protected void doWork(Long id, String taskName) {
+        taskDispatcher.dispatch(id, taskName);
     }
 
     protected Connection newConnection() throws SQLException {
-        return Db.createConnection();
+        return dataSource.getConnection();
     }
 
     public static String getLastError(Long id, String taskName, Exception e) {
@@ -257,9 +263,9 @@ public class DatabaseTablePoller {
                         }
                     }
                 }
-                // } catch (SQLTransientException | SQLNonTransientConnectionException | SQLRecoverableException e) {
-                // TODO: ignore these?
-            } catch (SQLException e) {
+            } catch (SQLTransientException | SQLNonTransientConnectionException | SQLRecoverableException e) {
+                handleTransientAndRecoverableException(this.taskName, e);
+            } catch (Exception e) {
                 log.warn("Failed to run task, id=" + id + ", will be automatically repeated", e); //$NON-NLS-1$ //$NON-NLS-2$
             } finally {
                 Thread.currentThread().setName(oldThreadName);
@@ -268,7 +274,7 @@ public class DatabaseTablePoller {
 
         protected boolean handleTask(Connection conn, ResultSet rs) throws SQLException {
             String taskName = rs.getString("task_name"); //$NON-NLS-1$
-            int failedAttempts = rs.getInt("failed_attempts"); //$NON-NLS-1$
+            int previousFailedAttempts = rs.getInt("failed_attempts"); //$NON-NLS-1$
 
             markTaskBeingProcessed(rs);
 
@@ -276,15 +282,14 @@ public class DatabaseTablePoller {
             Savepoint savepoint = conn.setSavepoint();
 
             try {
-                doWork(id, taskName, failedAttempts);
+                doWork(id, taskName);
                 handleTaskSuccess(rs);
             } catch (SQLTransientException | SQLNonTransientConnectionException | SQLRecoverableException e) {
-                handleTransientAndRecoverableException(taskName, e);
-                return false;
+                throw e;
             } catch (Exception e) {
                 conn.rollback(savepoint);
                 // assume error can be written to the queue
-                handleTaskException(rs, taskName, failedAttempts, e);
+                handleTaskException(rs, taskName, previousFailedAttempts, e);
             }
 
             rs.updateRow();
@@ -295,7 +300,7 @@ public class DatabaseTablePoller {
         protected void handleTransientAndRecoverableException(String taskName, SQLException e) {
             // assume won't help to try and write to database just now, so log only
             // instead
-            log.warn("Failed to process task: id=" + id + ", taskName=" + taskName, e); //$NON-NLS-1$ //$NON-NLS-2$
+            log.warn("Failed to process task: id=" + id + ", taskName=" + taskName + ". Will automatically retry", e); //$NON-NLS-1$ //$NON-NLS-2$
         }
 
         protected void markTaskBeingProcessed(ResultSet rs) throws SQLException {
@@ -333,24 +338,12 @@ public class DatabaseTablePoller {
         protected String getSqlForPickingSingleTaskById() {
             return "SELECT id, priority, task_name, status, last_attempt_ts, next_attempt_after, secs_between_attempts, failed_attempts, max_attempts, last_error" //$NON-NLS-1$
                     + " FROM dbqueue" //$NON-NLS-1$
-                    + " WHERE id=? AND task_name=? AND last_attempt_ts>=?" //$NON-NLS-1$
+                    + " WHERE id=?"//$NON-NLS-1$
+                    + "   AND task_name=?"//$NON-NLS-1$
+                    + "   AND last_attempt_ts>=?" //$NON-NLS-1$
                     + " FOR UPDATE SKIP LOCKED"; //$NON-NLS-1$
         }
 
     }
 
-    /** Test method. */
-    public static void main(String[] args) {
-
-        TaskDispatcher taskDispatcher = (id, taskName, failedAttempts) -> {
-            if (id == 3) {
-                // TODO: remove. throws a failure for just for fun
-                throw new IllegalArgumentException("Unknown task id=" + 3, new UnsupportedOperationException()); //$NON-NLS-1$
-            }
-            log.info("*********** Processed: id=" + id + ", task=" + taskName); //$NON-NLS-1$ //$NON-NLS-2$
-            return;
-        };
-
-        new DatabaseTablePoller(5, 50, taskDispatcher).start();
-    }
 }

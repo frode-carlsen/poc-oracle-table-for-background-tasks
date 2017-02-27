@@ -12,11 +12,14 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 /** simple setup for testing. */
-public class Db {
+class TestDb {
 
-    private static DataSource dataSource;
+    private static final DataSource dataSource = getDataSource();
 
-    static {
+    static DataSource getDataSource() {
+        if (dataSource != null) {
+            return dataSource;
+        }
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:oracle:thin:@localhost:1521/XE");
         config.setMaximumPoolSize(5);
@@ -24,14 +27,12 @@ public class Db {
         config.setPassword("testdb");
         config.setAutoCommit(false);
 
-        HikariDataSource ds = new HikariDataSource(config);
-        dataSource = ds;
-
+        return new HikariDataSource(config);
     }
 
     private static final AtomicBoolean INITIALISED = new AtomicBoolean();
 
-    public static void initTestDb(boolean forceClean) {
+    static void initTestDb(boolean forceClean) {
 
         if (INITIALISED.compareAndSet(false, true)) {
             Flyway flyway = new Flyway();
@@ -46,8 +47,7 @@ public class Db {
         }
     }
 
-    public static Connection createConnection() throws SQLException {
-        initTestDb(false);
+    static Connection createConnection() throws SQLException {
         return dataSource.getConnection();
     }
 }
