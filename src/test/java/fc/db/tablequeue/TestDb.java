@@ -32,13 +32,16 @@ class TestDb {
 
     private static final AtomicBoolean INITIALISED = new AtomicBoolean();
 
-    static void initTestDb(boolean forceClean) {
-
+    static void initTestDb(boolean forceClean, String... additionalMigrationLocations) {
+        String[] locations = new String[1 + additionalMigrationLocations.length];
+        locations[0] = "filesystem:./src/main/resources/db/migrations";
+        System.arraycopy(additionalMigrationLocations, 0, locations, 1, additionalMigrationLocations.length);
+        
         if (INITIALISED.compareAndSet(false, true)) {
             Flyway flyway = new Flyway();
 
             flyway.setDataSource(dataSource);
-            flyway.setLocations("filesystem:./src/main/resources/db/migrations");
+            flyway.setLocations(locations);
             flyway.setCleanOnValidationError(true);
             if (forceClean) {
                 flyway.clean();

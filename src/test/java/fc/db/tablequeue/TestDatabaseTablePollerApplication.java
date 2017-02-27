@@ -9,6 +9,8 @@ class TestDatabaseTablePollerApplication {
     /** Test method. */
     public static void main(String[] args) {
 
+        TestDb.initTestDb(false, "filesystem:./src/main/resources/db/testdata");
+        
         TaskDispatcher taskDispatcher = (id, taskName) -> {
             if (id == 3) {
                 // TODO: throws a failure for just for impact
