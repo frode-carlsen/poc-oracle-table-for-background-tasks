@@ -1,4 +1,4 @@
-insert into dbqueue(id, priority, status, task_name) select * from
+insert into process_task(id, priority, status, task_name) select * from
 (
 WITH data(r) AS (
       SELECT 1 r FROM dual
