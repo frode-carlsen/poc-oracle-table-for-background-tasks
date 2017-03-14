@@ -32,9 +32,5 @@ For a real implementation, connecting this to some actual 'work' should be made 
 ## A couple of notes if there is a large number of tasks generated/sec:
 
 1. it might be useful to remove all stats on the table and lock down stats (to avoid automatically gathering statistics continually). The optimizer then uses dynamic sampling.
-
-## A couple of notes on possible added-value functionality:
-
-3. exlusive or (only run one task within a given set of tasks concurrently)
- 
+2. if a large number of tasks are created (1000s) per day the table will grow.  At some point it's worth partitioning the table for easier maintenance (old DONE tasks can be purged instead of deleted).
 
