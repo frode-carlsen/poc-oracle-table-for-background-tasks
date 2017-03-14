@@ -21,14 +21,14 @@ public class QueueTestIT {
     public void setup_testdata() throws SQLException {
 
         Object[][] testdata = new Object[][] {
-                { 5, "mytask", 5, "KLAR" },
-                { 4, "mytask", 2, "KLAR" },
-                { 3, "mytask", 2, "KLAR" },
-                { 2, "mytask", 1, "FERDIG" },
-                { 1, "mytask", 1, "KLAR" }
+                { 5, "mytask", 5, "TODO" },
+                { 4, "mytask", 2, "TODO" },
+                { 3, "mytask", 2, "TODO" },
+                { 2, "mytask", 1, "DONE" },
+                { 1, "mytask", 1, "TODO" }
 
         };
-        String insertSql = "insert into prosess_oppgave (id, oppgave_navn, prioritet, status) values (?, ?, ?, ?)";
+        String insertSql = "insert into process_task (id, task_name, priority, status) values (?, ?, ?, ?)";
 
         try (Connection conn = getConnection(); PreparedStatement stmt = conn.prepareStatement(insertSql);) {
             setupTestData(testdata, stmt);
@@ -58,7 +58,7 @@ public class QueueTestIT {
     @After
     public void clear_testdata() throws SQLException {
         try (Connection conn = getConnection();
-                PreparedStatement stmt = conn.prepareStatement("truncate table prosess_oppgave");) {
+                PreparedStatement stmt = conn.prepareStatement("truncate table process_task");) {
             stmt.execute();
         }
     }
@@ -90,15 +90,15 @@ public class QueueTestIT {
                 Connection conn2 = getConnection();
                 Connection conn3 = getConnection();) {
 
-            long task1 = getTaskExcept(conn1, "FERDIG");
-            long task2 = getTaskExcept(conn2, "FERDIG");
-            long task3 = getTaskExcept(conn3, "FERDIG");
+            long task1 = getTaskExcept(conn1, "DONE");
+            long task2 = getTaskExcept(conn2, "DONE");
+            long task3 = getTaskExcept(conn3, "DONE");
 
             assertThat(task1).isEqualTo(1);
             assertThat(task2).isEqualTo(3);
             assertThat(task3).isEqualTo(4);
 
-            long task3_1 = getTaskExcept(conn3, "FERDIG");
+            long task3_1 = getTaskExcept(conn3, "DONE");
             assertThat(task3).isEqualTo(task3_1);
         }
     }
@@ -109,7 +109,7 @@ public class QueueTestIT {
 
     private long getTaskExcept(Connection conn, String exceptStatus) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
-                "select id from prosess_oppgave where status not in (?) order by prioritet, id  for update skip locked");) {
+                "select id from process_task where status not in (?) order by priority, id  for update skip locked");) {
 
             ps.setFetchSize(1);
             ps.setString(1, exceptStatus);
